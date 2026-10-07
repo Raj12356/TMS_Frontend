@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./user.module.css";
+import Footer from "../components/Footer";
 
 type User = {
   id: number;
@@ -986,6 +987,7 @@ export default function UserDashboard() {
             </div>
           </div>
         )}
+        <Footer />
       </main>
     </div>
   );

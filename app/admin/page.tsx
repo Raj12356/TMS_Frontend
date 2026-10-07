@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./admin.module.css";
+import Footer from "../components/Footer";
 
 interface User {
   id: number;
@@ -689,6 +690,7 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+        <Footer />
       </main>
     </div>
   );

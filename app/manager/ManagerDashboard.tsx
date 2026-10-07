@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./manager.module.css";
+import Footer from "../components/Footer";
 
 type Comment = {
   id: number;
@@ -979,6 +980,7 @@ export default function ManagerDashboard() {
             </div>
           </div>
         )}
+        <Footer />
       </main>
     </div>
   );

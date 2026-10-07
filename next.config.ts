@@ -22,13 +22,7 @@ const nextConfig: NextConfig = {
       };
     }
 
-    // Default fallback for local development
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${cleanBackendUrl}/api/:path*`,
-      },
-    ];
+    return [];
   },
 };
 

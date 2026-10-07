@@ -1,0 +1,127 @@
+/* Author Footer Component Styles */
+.footer {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 0.88rem;
+  color: #64748b;
+  transition: all 0.3s ease;
+  width: 100%;
+}
+
+.footerLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.footerAuthor {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1e293b;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footerAuthorHighlight {
+  color: #6366f1;
+  font-weight: 800;
+}
+
+.footerRole {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.footerLinks {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.footerLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.footerLink:hover {
+  background: #f1f5f9;
+  color: #6366f1;
+  border-color: #a5b4fc;
+  transform: translateY(-1px);
+}
+
+.footerCopyright {
+  width: 100%;
+  text-align: center;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+  padding-top: 12px;
+}
+
+/* Dark mode styling */
+.darkFooter {
+  border-top-color: #334155;
+  color: #94a3b8;
+}
+
+.darkFooter .footerAuthor {
+  color: #f8fafc;
+}
+
+.darkFooter .footerAuthorHighlight {
+  color: #818cf8;
+}
+
+.darkFooter .footerRole {
+  color: #64748b;
+}
+
+.darkFooter .footerLink {
+  background: #1e293b;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+.darkFooter .footerLink:hover {
+  background: #334155;
+  color: #a5b4fc;
+  border-color: #6366f1;
+}
+
+.darkFooter .footerCopyright {
+  border-top-color: #334155;
+  color: #64748b;
+}
+
+@media (max-width: 768px) {
+  .footer {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .footerLeft {
+    align-items: center;
+  }
+}
+
