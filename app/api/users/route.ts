@@ -3,10 +3,13 @@ import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "../../
 import { listUsers, createUser, findUserByEmail, isUniqueViolation } from "../../../lib/db";
 import { hashPassword } from "../../../lib/password";
 
-// GET - list users (passwords are never returned)
-export async function GET() {
+// GET - list users (passwords are never returned). Optionally filter by ?role=manager
+export async function GET(req: NextRequest) {
   try {
-    return NextResponse.json(await listUsers());
+    const role = req.nextUrl.searchParams.get("role");
+    const users = await listUsers();
+    const filtered = role ? users.filter((u) => u.role === role) : users;
+    return NextResponse.json(filtered);
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });

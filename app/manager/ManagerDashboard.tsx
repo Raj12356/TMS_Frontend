@@ -7,6 +7,7 @@ import styles from "./manager.module.css";
 type Comment = {
   id: number;
   userId: number | null;
+  managerId?: number | null;
   userName?: string | null;
   message: string;
   createdAt: string;
@@ -57,6 +58,7 @@ export default function ManagerDashboard() {
 
   const [activeTaskChat, setActiveTaskChat] = useState<number | null>(null);
   const [newMessage, setNewMessage] = useState("");
+  const [privateComments, setPrivateComments] = useState<Comment[]>([]);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
   // AUTH CHECK
@@ -117,12 +119,48 @@ export default function ManagerDashboard() {
     fetchUsers();
   }, []);
 
+  // FETCH PRIVATE COMMENTS for the active chat task filtered by this manager's id
+  useEffect(() => {
+    if (!activeTaskChat) {
+      setPrivateComments([]);
+      return;
+    }
+
+    // Read directly from localStorage to avoid state timing issues
+    let managerId: number | null = null;
+    try {
+      const stored = localStorage.getItem("currentUser");
+      if (stored) {
+        const u = JSON.parse(stored);
+        if (u?.id && Number.isInteger(Number(u.id))) {
+          managerId = Number(u.id);
+        }
+      }
+    } catch { /* ignore */ }
+
+    if (!managerId) {
+      setPrivateComments([]);
+      return;
+    }
+
+    fetch(`/api/tasks/${activeTaskChat}/comments?managerId=${managerId}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: Comment[]) => {
+        if (Array.isArray(data)) {
+          // Client-side safety filter: strictly only show this manager's messages
+          const filtered = data.filter((c) => c.managerId === managerId);
+          setPrivateComments(filtered);
+        }
+      })
+      .catch(() => setPrivateComments([]));
+  }, [activeTaskChat, currentManager?.id]);
+
   // AUTO SCROLL CHAT
   useEffect(() => {
     if (activeTaskChat && chatBottomRef.current) {
       chatBottomRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [activeTaskChat, tasks]);
+  }, [activeTaskChat, privateComments]);
 
   // INPUT HANDLER
   const handleChange = (
@@ -188,12 +226,16 @@ export default function ManagerDashboard() {
     try {
       const currentStored = localStorage.getItem("currentUser");
       const userObj = currentStored ? JSON.parse(currentStored) : {};
+      const managerId = userObj?.id && Number.isInteger(Number(userObj.id))
+        ? Number(userObj.id)
+        : null;
 
       const res = await fetch(`/api/tasks/${taskId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: userObj.id ?? null,
+          userId: managerId,
+          managerId: managerId,   // manager IS the channel owner
           message: newMessage.trim(),
         }),
       });
@@ -201,7 +243,18 @@ export default function ManagerDashboard() {
       if (!res.ok) throw new Error("Failed to post message");
 
       setNewMessage("");
-      await fetchTasks();
+
+      // Refresh private comments for this manager's channel
+      if (managerId) {
+        const cRes = await fetch(`/api/tasks/${taskId}/comments?managerId=${managerId}`);
+        if (cRes.ok) {
+          const cData = await cRes.json();
+          if (Array.isArray(cData)) {
+            // Strictly only show this manager's messages
+            setPrivateComments(cData.filter((c: Comment) => c.managerId === managerId));
+          }
+        }
+      }
     } catch (e) {
       console.error(e);
       alert("Failed to send message");
@@ -605,15 +658,29 @@ export default function ManagerDashboard() {
                     </button>
                   </div>
 
+                  {/* Private channel indicator */}
+                  <div style={{
+                    padding: "8px 20px",
+                    background: "#f0fdf4",
+                    borderBottom: "1px solid #bbf7d0",
+                    fontSize: "12px",
+                    color: "#166534",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}>
+                    🔒 Private channel — only you and the team member can see these messages
+                  </div>
+
                   <div className={styles.chatMessages}>
-                    {(!activeChatTask.comments || activeChatTask.comments.length === 0) ? (
+                    {privateComments.length === 0 ? (
                       <div className={styles.emptyChat}>
                         <div className={styles.emptyChatIcon}>💬</div>
                         <p>No messages yet.</p>
                         <span>Start the discussion with the assigned team member!</span>
                       </div>
                     ) : (
-                      activeChatTask.comments.map((c) => {
+                      privateComments.map((c) => {
                         const isSelf =
                           currentManager?.id && c.userId === currentManager.id;
 
@@ -653,7 +720,7 @@ export default function ManagerDashboard() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter") sendMessage(activeTaskChat);
                       }}
-                      placeholder="Type your message to the team..."
+                      placeholder="Type your private message to the team member..."
                     />
                     <button
                       className={styles.chatSendBtn}

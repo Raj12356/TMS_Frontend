@@ -32,6 +32,13 @@ type Task = {
   comments?: Comment[];
 };
 
+type Manager = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+};
+
 const TeamMemberDashboard = () => {
   const router = useRouter();
 
@@ -49,6 +56,9 @@ const TeamMemberDashboard = () => {
 
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string>("Team Member");
+
+  const [managers, setManagers] = useState<Manager[]>([]);
+  const [selectedManager, setSelectedManager] = useState<Manager | null>(null);
 
   const commentsEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -74,6 +84,22 @@ const TeamMemberDashboard = () => {
       router.push("/login");
     }
   }, [router]);
+
+  // LOAD MANAGERS
+  useEffect(() => {
+    fetch("/api/users?role=manager")
+      .then((res) => {
+        if (!res.ok) return [];
+        return res.json();
+      })
+      .then((data: Manager[]) => {
+        if (Array.isArray(data)) {
+          setManagers(data);
+          if (data.length > 0) setSelectedManager(data[0]);
+        }
+      })
+      .catch((err) => console.error("Error fetching managers:", err));
+  }, []);
 
   // LOAD TASKS
   useEffect(() => {
@@ -122,18 +148,15 @@ const TeamMemberDashboard = () => {
     router.push("/login");
   };
 
-  // LOAD COMMENTS WHEN TASK IS SELECTED
+  // LOAD COMMENTS WHEN TASK OR SELECTED MANAGER CHANGES (filtered by manager for privacy)
   useEffect(() => {
     if (!selectedTask?.id) {
       setComments([]);
       return;
     }
 
-    if (Array.isArray(selectedTask.comments) && selectedTask.comments.length > 0) {
-      setComments(selectedTask.comments);
-    }
-
-    fetch(`/api/tasks/${selectedTask.id}/comments`)
+    const managerParam = selectedManager?.id ? `?managerId=${selectedManager.id}` : "";
+    fetch(`/api/tasks/${selectedTask.id}/comments${managerParam}`)
       .then((res) => {
         if (!res.ok) return [];
         return res.json();
@@ -146,7 +169,7 @@ const TeamMemberDashboard = () => {
       .catch((err) => {
         console.error("Error loading comments:", err);
       });
-  }, [selectedTask?.id]);
+  }, [selectedTask?.id, selectedManager?.id]);
 
   // AUTO SCROLL TO BOTTOM OF COMMENTS
   useEffect(() => {
@@ -201,6 +224,10 @@ const TeamMemberDashboard = () => {
     if (!selectedTask?.id || !newComment.trim() || currentUserId === null) {
       return;
     }
+    if (!selectedManager) {
+      alert("Please select a manager to chat with.");
+      return;
+    }
 
     const commentMessage = newComment.trim();
     setSubmittingComment(true);
@@ -212,6 +239,7 @@ const TeamMemberDashboard = () => {
         body: JSON.stringify({
           message: commentMessage,
           userId: currentUserId,
+          managerId: selectedManager.id,  // route to the selected manager's private channel
         }),
       });
 
@@ -232,14 +260,6 @@ const TeamMemberDashboard = () => {
 
         setComments((prev) => [...prev, newCommentObj]);
         setNewComment("");
-
-        setTasks((prev) =>
-          prev.map((t) =>
-            t.id === selectedTask.id
-              ? { ...t, comments: [...(t.comments || []), newCommentObj] }
-              : t
-          )
-        );
       }
     } catch (err) {
       console.error("Failed to add comment:", err);
@@ -531,6 +551,31 @@ const TeamMemberDashboard = () => {
               </button>
             </div>
 
+            {/* MANAGER SELECTOR */}
+            <div className={styles.managerSelectorBar}>
+              <span className={styles.managerSelectorLabel}>
+                👔 Chat with Manager:
+              </span>
+              {managers.length === 0 ? (
+                <span className={styles.noManagerText}>No managers available</span>
+              ) : (
+                <select
+                  className={styles.managerSelect}
+                  value={selectedManager?.id ?? ""}
+                  onChange={(e) => {
+                    const mgr = managers.find((m) => m.id === Number(e.target.value));
+                    setSelectedManager(mgr ?? null);
+                  }}
+                >
+                  {managers.map((mgr) => (
+                    <option key={mgr.id} value={mgr.id}>
+                      {mgr.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
             <div className={styles.detailCommentsList}>
               {!comments || comments.length === 0 ? (
                 <div className={styles.emptyState}>
@@ -560,26 +605,37 @@ const TeamMemberDashboard = () => {
             </div>
 
             <div className={styles.detailInputArea}>
-              <input
-                className={styles.commentInput}
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    addComment();
+              {selectedManager && (
+                <div className={styles.replyingToBar}>
+                  ✉️ Sending to <strong>{selectedManager.name}</strong>
+                </div>
+              )}
+              <div className={styles.inputRow}>
+                <input
+                  className={styles.commentInput}
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      addComment();
+                    }
+                  }}
+                  placeholder={
+                    selectedManager
+                      ? `Message ${selectedManager.name}...`
+                      : "Type your message or update..."
                   }
-                }}
-                placeholder="Type your message or update..."
-                disabled={submittingComment}
-              />
-              <button
-                className={styles.sendCommentBtn}
-                onClick={addComment}
-                disabled={submittingComment}
-              >
-                {submittingComment ? "..." : "Send"}
-              </button>
+                  disabled={submittingComment}
+                />
+                <button
+                  className={styles.sendCommentBtn}
+                  onClick={addComment}
+                  disabled={submittingComment}
+                >
+                  {submittingComment ? "..." : "Send"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

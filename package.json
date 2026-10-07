@@ -5,11 +5,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "api": "json-server --watch user.json --port 5000",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0",
     "lint": "eslint",
-    "server": "json-server user.json --port 5000",
     "postinstall": "prisma skills sync || exit 0",
     "contract:emit": "prisma contract emit"
   },

@@ -3,6 +3,7 @@ import { query, withTransaction } from "./db";
 export interface ApiComment {
   id: number;
   userId: number | null;
+  managerId: number | null;
   userName: string | null;
   message: string;
   createdAt: string;
@@ -95,6 +96,7 @@ export type ApiTask = ReturnType<typeof toApiTask>;
 const toApiComment = (r: any): ApiComment => ({
   id: r.id,
   userId: r.user_id,
+  managerId: r.manager_id ?? null,
   userName: r.user_name ?? null,
   message: r.message,
   createdAt: new Date(r.created_at).toISOString(),
@@ -194,7 +196,30 @@ export async function taskExists(id: number): Promise<boolean> {
   return (rowCount ?? 0) > 0;
 }
 
-export async function listComments(taskId: number): Promise<ApiComment[]> {
+export async function listComments(taskId: number, managerId?: number | null): Promise<ApiComment[]> {
+  const hasManagerFilter =
+    managerId !== undefined && managerId !== null && Number.isInteger(Number(managerId));
+
+  if (hasManagerFilter) {
+    try {
+      const { rows } = await query(
+        `SELECT c.id, c.user_id, c.manager_id, u.name AS user_name, c.message, c.created_at
+           FROM tms_comments c LEFT JOIN tms_users u ON u.id = c.user_id
+          WHERE c.task_id = $1 AND c.manager_id = $2 ORDER BY c.created_at, c.id`,
+        [taskId, Number(managerId)]
+      );
+      return rows.map(toApiComment);
+    } catch (err: any) {
+      // If manager_id column doesn't exist yet (migration pending), return empty array safely
+      if (err?.code === "42703") {
+        console.warn("listComments: manager_id column not ready yet, returning empty");
+        return [];
+      }
+      throw err;
+    }
+  }
+
+  // No manager filter — return all comments for the task (used internally)
   const { rows } = await query(
     `SELECT c.id, c.user_id, u.name AS user_name, c.message, c.created_at
        FROM tms_comments c LEFT JOIN tms_users u ON u.id = c.user_id
@@ -204,17 +229,22 @@ export async function listComments(taskId: number): Promise<ApiComment[]> {
   return rows.map(toApiComment);
 }
 
-/** userId that doesn't match a real user is stored as NULL. */
-export async function addComment(taskId: number, userId: number | null, message: string): Promise<ApiComment> {
+/** userId = author (team member or manager), managerId = the manager who owns this conversation thread. */
+export async function addComment(
+  taskId: number,
+  userId: number | null,
+  message: string,
+  managerId?: number | null
+): Promise<ApiComment> {
   const { rows } = await query(
     `WITH ins AS (
-       INSERT INTO tms_comments (task_id, user_id, message)
-       VALUES ($1, (SELECT id FROM tms_users WHERE id = $2), $3)
-       RETURNING id, user_id, message, created_at
+       INSERT INTO tms_comments (task_id, user_id, manager_id, message)
+       VALUES ($1, (SELECT id FROM tms_users WHERE id = $2), (SELECT id FROM tms_users WHERE id = $3), $4)
+       RETURNING id, user_id, manager_id, message, created_at
      )
-     SELECT ins.id, ins.user_id, u.name AS user_name, ins.message, ins.created_at
+     SELECT ins.id, ins.user_id, ins.manager_id, u.name AS user_name, ins.message, ins.created_at
        FROM ins LEFT JOIN tms_users u ON u.id = ins.user_id`,
-    [taskId, userId, message]
+    [taskId, userId, managerId ?? null, message]
   );
   return toApiComment(rows[0]);
 }

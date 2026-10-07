@@ -588,9 +588,68 @@
   background: #ffffff;
   border-top: 1px solid #e2e8f0;
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.replyingToBar {
+  font-size: 12px;
+  color: #64748b;
+  padding: 4px 10px;
+  background: #f1f5f9;
+  border-radius: 8px;
+}
+
+.inputRow {
+  display: flex;
   gap: 10px;
   align-items: center;
 }
+
+/* Manager Selector Bar */
+.managerSelectorBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: #f1f5f9;
+  border-bottom: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+
+.managerSelectorLabel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.managerSelect {
+  flex: 1;
+  min-width: 140px;
+  padding: 6px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.managerSelect:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.noManagerText {
+  font-size: 12.5px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+
 
 .commentInput {
   flex: 1;
@@ -752,6 +811,30 @@
 
 .dark .buttons {
   border-top-color: #334155;
+}
+
+.dark .managerSelectorBar {
+  background: #0f172a;
+  border-bottom-color: #334155;
+}
+
+.dark .managerSelectorLabel {
+  color: #94a3b8;
+}
+
+.dark .managerSelect {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.dark .replyingToBar {
+  background: #1e293b;
+  color: #94a3b8;
+}
+
+.dark .noManagerText {
+  color: #475569;
 }
 
 /* Animations */
