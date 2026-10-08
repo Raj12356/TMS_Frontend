@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./TeamMemberDashboard.module.css";
 import Footer from "../components/Footer";
+import TaskAssistantBot from "./TaskAssistantBot";
 import {
   BarChart,
   Bar,
@@ -1100,6 +1101,14 @@ const TeamMemberDashboard = () => {
           </div>
         </div>
       )}
+
+      {/* FLOATING TASK ASSISTANT CHATBOT */}
+      <TaskAssistantBot
+        tasks={safeTasks}
+        managers={managers}
+        currentUserName={currentUserName}
+        onSelectTask={(task) => setSelectedTask(task)}
+      />
     </div>
   );
 };
