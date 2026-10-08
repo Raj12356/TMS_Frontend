@@ -483,7 +483,8 @@ const TeamMemberDashboard = () => {
   // OPEN TRANSFER MODAL
   const openTransferModal = (task: Task) => {
     setTaskToTransfer(task);
-    setTargetPeerId(peerMembers.length > 0 ? String(peerMembers[0].id) : "");
+    const defaultPeer = peerMembers.find((p) => Number(p.id) !== currentUserId);
+    setTargetPeerId(defaultPeer ? String(defaultPeer.id) : peerMembers.length > 0 ? String(peerMembers[0].id) : "");
     setTransferReason("");
   };
 
@@ -1436,7 +1437,7 @@ const TeamMemberDashboard = () => {
       {/* TASK TRANSFER / HAND-OFF MODAL */}
       {taskToTransfer && (
         <div className={styles.modalOverlay} onClick={closeTransferModal}>
-          <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+          <div className={styles.modalBox} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
               <div className={styles.modalTitleGroup}>
                 <span className={styles.modalIcon}>🔄</span>
@@ -1473,11 +1474,10 @@ const TeamMemberDashboard = () => {
                   </p>
                 ) : (
                   <select
-                    className={styles.managerSelect}
+                    className={styles.transferSelect}
                     value={targetPeerId}
                     onChange={(e) => setTargetPeerId(e.target.value)}
                     disabled={transferLoading}
-                    style={{ width: "100%", padding: "10px 14px" }}
                   >
                     {peerMembers.map((peer) => (
                       <option key={peer.id} value={peer.id}>
@@ -1516,8 +1516,12 @@ const TeamMemberDashboard = () => {
                 type="button"
                 className={styles.modalSubmitBtn}
                 onClick={submitTransferRequest}
-                disabled={transferLoading || peerMembers.length === 0}
-                style={{ background: "#4f46e5" }}
+                disabled={transferLoading || peerMembers.length === 0 || !targetPeerId}
+                style={{
+                  background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                  boxShadow: "0 2px 8px rgba(79, 70, 229, 0.35)",
+                  cursor: transferLoading || peerMembers.length === 0 || !targetPeerId ? "not-allowed" : "pointer",
+                }}
               >
                 {transferLoading ? "⏳ Sending Request..." : "📤 Send Transfer Request"}
               </button>
