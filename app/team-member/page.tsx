@@ -23,6 +23,7 @@ type Comment = {
 
 type Task = {
   id: number;
+  userId?: number | null;
   title: string;
   description?: string;
   dueDate?: string;
@@ -115,7 +116,7 @@ const TeamMemberDashboard = () => {
     }
   }, [router]);
 
-  // LOAD MANAGERS
+  // LOAD MANAGERS (strictly filter for role === "manager")
   useEffect(() => {
     fetch("/api/users?role=manager")
       .then((res) => {
@@ -124,12 +125,29 @@ const TeamMemberDashboard = () => {
       })
       .then((data: Manager[]) => {
         if (Array.isArray(data)) {
-          setManagers(data);
-          if (data.length > 0) setSelectedManager(data[0]);
+          const onlyManagers = data.filter(
+            (u) => u && typeof u.role === "string" && u.role.trim().toLowerCase() === "manager"
+          );
+          setManagers(onlyManagers);
+          if (onlyManagers.length > 0) {
+            setSelectedManager((prev) => (prev && onlyManagers.some((m) => m.id === prev.id) ? prev : onlyManagers[0]));
+          } else {
+            setSelectedManager(null);
+          }
         }
       })
       .catch((err) => console.error("Error fetching managers:", err));
   }, []);
+
+  // When a task is selected, auto-select the manager assigned to the task if available in managers list
+  useEffect(() => {
+    if (selectedTask && selectedTask.userId && managers.length > 0) {
+      const taskMgr = managers.find((m) => m.id === Number(selectedTask.userId));
+      if (taskMgr) {
+        setSelectedManager(taskMgr);
+      }
+    }
+  }, [selectedTask, managers]);
 
   // LOAD TASKS
   useEffect(() => {

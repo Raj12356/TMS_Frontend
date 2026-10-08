@@ -6,9 +6,11 @@ import { hashPassword } from "../../../lib/password";
 // GET - list users (passwords are never returned). Optionally filter by ?role=manager
 export async function GET(req: NextRequest) {
   try {
-    const role = req.nextUrl.searchParams.get("role");
+    const roleParam = req.nextUrl.searchParams.get("role")?.trim().toLowerCase();
     const users = await listUsers();
-    const filtered = role ? users.filter((u) => u.role === role) : users;
+    const filtered = roleParam
+      ? users.filter((u) => u.role && u.role.trim().toLowerCase() === roleParam)
+      : users;
     return NextResponse.json(filtered);
   } catch (err) {
     console.error(err);
