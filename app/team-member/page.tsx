@@ -33,10 +33,21 @@ type Task = {
   status?: string;
   completed?: boolean;
   attachments?: string[];
+  assignedTo?: number | null;
+  transferRequestedTo?: number | null;
+  transferRequestedBy?: number | null;
+  transferNote?: string | null;
   comments?: Comment[];
 };
 
 type Manager = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+};
+
+type PeerMember = {
   id: number;
   name: string;
   email: string;
@@ -56,13 +67,20 @@ const TeamMemberDashboard = () => {
 
   const [darkMode, setDarkMode] = useState(false);
   const [notification, setNotification] = useState("");
-  const [filterTab, setFilterTab] = useState<"all" | "pending" | "in-progress" | "completed">("all");
+  const [filterTab, setFilterTab] = useState<"all" | "pending" | "in-progress" | "completed" | "transfers">("all");
 
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string>("Team Member");
 
   const [managers, setManagers] = useState<Manager[]>([]);
   const [selectedManager, setSelectedManager] = useState<Manager | null>(null);
+  const [peerMembers, setPeerMembers] = useState<PeerMember[]>([]);
+
+  // Task Transfer / Delegation state
+  const [taskToTransfer, setTaskToTransfer] = useState<Task | null>(null);
+  const [targetPeerId, setTargetPeerId] = useState<string>("");
+  const [transferReason, setTransferReason] = useState<string>("");
+  const [transferLoading, setTransferLoading] = useState<boolean>(false);
 
   const commentsEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -117,16 +135,14 @@ const TeamMemberDashboard = () => {
     }
   }, [router]);
 
-  // LOAD MANAGERS (strictly filter for role === "manager")
+  // LOAD MANAGERS AND PEER TEAM MEMBERS
   useEffect(() => {
-    fetch("/api/users?role=manager")
-      .then((res) => {
-        if (!res.ok) return [];
-        return res.json();
-      })
-      .then((data: Manager[]) => {
-        if (Array.isArray(data)) {
-          const onlyManagers = data.filter(
+    fetch("/api/users")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((allUsers: any[]) => {
+        if (Array.isArray(allUsers)) {
+          // 1. Managers
+          const onlyManagers = allUsers.filter(
             (u) => u && typeof u.role === "string" && u.role.trim().toLowerCase() === "manager"
           );
           setManagers(onlyManagers);
@@ -135,10 +151,21 @@ const TeamMemberDashboard = () => {
           } else {
             setSelectedManager(null);
           }
+
+          // 2. Peer Team Members (excluding self)
+          const isTeamMember = (role?: string) => {
+            if (!role) return false;
+            return role.trim().toLowerCase().replace(/[-_]/g, " ") === "team member";
+          };
+
+          const peers = allUsers.filter(
+            (u) => isTeamMember(u.role) && Number(u.id) !== currentUserId
+          );
+          setPeerMembers(peers);
         }
       })
-      .catch((err) => console.error("Error fetching managers:", err));
-  }, []);
+      .catch((err) => console.error("Error fetching users:", err));
+  }, [currentUserId]);
 
   // When a task is selected, auto-select the manager assigned to the task if available in managers list
   useEffect(() => {
@@ -150,11 +177,23 @@ const TeamMemberDashboard = () => {
     }
   }, [selectedTask, managers]);
 
-  // LOAD TASKS
+  // Function to reload tasks
+  const reloadTasks = () => {
+    if (currentUserId === null || currentUserId === undefined) return;
+    fetch(`/api/tasks?assignedTo=${currentUserId}&includeTransfers=true`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        const list: Task[] = Array.isArray(data) ? data : [];
+        setTasks(list);
+      })
+      .catch((err) => console.error("Error refreshing tasks:", err));
+  };
+
+  // LOAD TASKS (including incoming transfer requests)
   useEffect(() => {
     if (currentUserId === null || currentUserId === undefined) return;
 
-    fetch(`/api/tasks?assignedTo=${currentUserId}`)
+    fetch(`/api/tasks?assignedTo=${currentUserId}&includeTransfers=true`)
       .then((res) => {
         if (!res.ok) {
           throw new Error("Failed to fetch tasks");
@@ -441,6 +480,145 @@ const TeamMemberDashboard = () => {
     }
   };
 
+  // OPEN TRANSFER MODAL
+  const openTransferModal = (task: Task) => {
+    setTaskToTransfer(task);
+    setTargetPeerId(peerMembers.length > 0 ? String(peerMembers[0].id) : "");
+    setTransferReason("");
+  };
+
+  const closeTransferModal = () => {
+    setTaskToTransfer(null);
+    setTargetPeerId("");
+    setTransferReason("");
+    setTransferLoading(false);
+  };
+
+  // SUBMIT TRANSFER REQUEST
+  const submitTransferRequest = async () => {
+    if (!taskToTransfer || !targetPeerId || currentUserId === null) return;
+    setTransferLoading(true);
+
+    try {
+      const targetUser = peerMembers.find((p) => p.id === Number(targetPeerId));
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: taskToTransfer.id,
+          transferRequestedTo: Number(targetPeerId),
+          transferRequestedBy: currentUserId,
+          transferNote: transferReason.trim() || "No notes provided",
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to submit task transfer request");
+      }
+
+      setNotification(`📤 Transfer request sent to ${targetUser?.name || "peer"}!`);
+      setTimeout(() => setNotification(""), 3500);
+      closeTransferModal();
+      reloadTasks();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to request transfer");
+    } finally {
+      setTransferLoading(false);
+    }
+  };
+
+  // ACCEPT TRANSFER
+  const acceptTransfer = async (task: Task) => {
+    if (currentUserId === null) return;
+
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: task.id,
+          assignedTo: currentUserId,
+          transferRequestedTo: null,
+          transferRequestedBy: null,
+          transferNote: null,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to accept task transfer");
+
+      // Post an automatic comment acknowledging the hand-off
+      try {
+        await fetch(`/api/tasks/${task.id}/comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: currentUserId,
+            managerId: task.userId ?? null,
+            message: `🤝 Task hand-off accepted by ${currentUserName}. Now taking over this task!`,
+          }),
+        });
+      } catch { /* ignore comment failure */ }
+
+      setNotification(`✅ Task #${task.id} accepted! Added to your active workload.`);
+      setTimeout(() => setNotification(""), 3500);
+      reloadTasks();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to accept task");
+    }
+  };
+
+  // DECLINE TRANSFER
+  const declineTransfer = async (task: Task) => {
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: task.id,
+          transferRequestedTo: null,
+          transferRequestedBy: null,
+          transferNote: null,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to decline transfer");
+
+      setNotification(`Task transfer request declined.`);
+      setTimeout(() => setNotification(""), 3000);
+      reloadTasks();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to decline transfer");
+    }
+  };
+
+  // CANCEL TRANSFER REQUEST (by original sender)
+  const cancelTransfer = async (task: Task) => {
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: task.id,
+          transferRequestedTo: null,
+          transferRequestedBy: null,
+          transferNote: null,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to cancel transfer");
+
+      setNotification(`Transfer request cancelled.`);
+      setTimeout(() => setNotification(""), 3000);
+      reloadTasks();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to cancel transfer");
+    }
+  };
+
   // ADD COMMENT
   const addComment = async () => {
     if (!selectedTask?.id || !newComment.trim() || currentUserId === null) {
@@ -493,11 +671,23 @@ const TeamMemberDashboard = () => {
 
   // SUMMARY CALCULATIONS
   const safeTasks = Array.isArray(tasks) ? tasks : [];
+
+  // Transfer requests
+  const incomingTransfers = safeTasks.filter(
+    (t) => t.transferRequestedTo === currentUserId && t.assignedTo !== currentUserId
+  );
+  const outgoingTransfers = safeTasks.filter(
+    (t) => t.transferRequestedBy === currentUserId && t.transferRequestedTo
+  );
+
+  const myOwnTasks = safeTasks.filter((t) => t.assignedTo === currentUserId);
+
   const summary = {
-    total: safeTasks.length,
-    pending: safeTasks.filter((t) => t.status === "pending").length,
-    inProgress: safeTasks.filter((t) => t.status === "in-progress").length,
-    completed: safeTasks.filter((t) => t.status === "completed").length,
+    total: myOwnTasks.length,
+    pending: myOwnTasks.filter((t) => t.status === "pending").length,
+    inProgress: myOwnTasks.filter((t) => t.status === "in-progress").length,
+    completed: myOwnTasks.filter((t) => t.status === "completed").length,
+    incomingTransfers: incomingTransfers.length,
   };
 
   const chartData = [
@@ -507,6 +697,14 @@ const TeamMemberDashboard = () => {
   ];
 
   const filteredTasks = safeTasks.filter((t) => {
+    if (filterTab === "transfers") {
+      return (
+        (t.transferRequestedTo === currentUserId && t.assignedTo !== currentUserId) ||
+        (t.transferRequestedBy === currentUserId && t.transferRequestedTo)
+      );
+    }
+    // For other tabs, only show tasks actually assigned to me
+    if (t.assignedTo !== currentUserId) return false;
     if (filterTab === "all") return true;
     return t.status === filterTab;
   });
@@ -605,6 +803,30 @@ const TeamMemberDashboard = () => {
         </div>
       )}
 
+      {/* INCOMING TRANSFER ALERT BANNER */}
+      {incomingTransfers.length > 0 && (
+        <div className={styles.transferBanner}>
+          <div className={styles.transferBannerInfo}>
+            <div className={styles.transferBannerIcon}>📥</div>
+            <div>
+              <h4 className={styles.transferBannerTitle}>
+                You have {incomingTransfers.length} Incoming Task Transfer Request{incomingTransfers.length > 1 ? "s" : ""}!
+              </h4>
+              <p className={styles.transferBannerDesc}>
+                A teammate requested to delegate their task to you. Review and accept if you have bandwidth.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className={styles.acceptTransferBtn}
+            onClick={() => setFilterTab("transfers")}
+          >
+            Review Requests ({incomingTransfers.length}) →
+          </button>
+        </div>
+      )}
+
       {/* TASK LIST SECTION */}
       <div className={styles.taskSectionHeader}>
         <h2>Your Assigned Tasks</h2>
@@ -632,6 +854,16 @@ const TeamMemberDashboard = () => {
             onClick={() => setFilterTab("completed")}
           >
             Completed ({summary.completed})
+          </button>
+          <button
+            className={`${styles.filterTabBtn} ${filterTab === "transfers" ? styles.filterTabActive : ""}`}
+            onClick={() => setFilterTab("transfers")}
+            style={{
+              fontWeight: incomingTransfers.length > 0 ? "bold" : "normal",
+              color: incomingTransfers.length > 0 ? "#4338ca" : undefined,
+            }}
+          >
+            🔄 Transfers {incomingTransfers.length > 0 ? `(${incomingTransfers.length})` : ""}
           </button>
         </div>
       </div>
@@ -736,36 +968,115 @@ const TeamMemberDashboard = () => {
                   </div>
                 )}
 
+                {/* TRANSFER STATUS INFO */}
+                {task.transferRequestedTo === currentUserId && task.assignedTo !== currentUserId && (
+                  <div style={{
+                    margin: "10px 0",
+                    padding: "10px 12px",
+                    background: "#eff6ff",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: "8px",
+                    fontSize: "12px",
+                    color: "#1e40af",
+                  }}>
+                    <strong>📥 Transfer Requested to You:</strong>
+                    {task.transferNote && <p style={{ margin: "4px 0 0", fontStyle: "italic" }}>&quot;{task.transferNote}&quot;</p>}
+                  </div>
+                )}
+
+                {task.transferRequestedBy === currentUserId && task.transferRequestedTo && (
+                  <div className={styles.transferBadgePending}>
+                    ⏳ Transfer request pending approval by teammate
+                  </div>
+                )}
+
                 <div className={styles.buttons}>
-                  <button
-                    className={`${styles.btn} ${styles.start}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      updateStatus(task.id, "in-progress");
-                    }}
-                  >
-                    ⚡ Start
-                  </button>
+                  {/* If incoming transfer requested to current user */}
+                  {task.transferRequestedTo === currentUserId && task.assignedTo !== currentUserId ? (
+                    <>
+                      <button
+                        type="button"
+                        className={styles.acceptTransferBtn}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          acceptTransfer(task);
+                        }}
+                      >
+                        ✓ Accept & Take Over
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.declineTransferBtn}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          declineTransfer(task);
+                        }}
+                      >
+                        ✕ Decline
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className={`${styles.btn} ${styles.start}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateStatus(task.id, "in-progress");
+                        }}
+                      >
+                        ⚡ Start
+                      </button>
 
-                  <button
-                    className={`${styles.btn} ${task.status === "completed" ? styles.completedBtn : styles.complete}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openCompleteModal(task);
-                    }}
-                  >
-                    {task.status === "completed" ? "✓ Completed" : "✓ Complete"}
-                  </button>
+                      <button
+                        className={`${styles.btn} ${task.status === "completed" ? styles.completedBtn : styles.complete}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openCompleteModal(task);
+                        }}
+                      >
+                        {task.status === "completed" ? "✓ Completed" : "✓ Complete"}
+                      </button>
 
-                  <button
-                    className={`${styles.btn} ${styles.chatBtn}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedTask(task);
-                    }}
-                  >
-                    💬 Chat {task.comments?.length ? `(${task.comments.length})` : ""}
-                  </button>
+                      {/* Request Transfer button (only for uncompleted tasks assigned to self) */}
+                      {task.status !== "completed" && task.assignedTo === currentUserId && (
+                        task.transferRequestedTo ? (
+                          <button
+                            type="button"
+                            className={styles.cancelTransferBtn}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              cancelTransfer(task);
+                            }}
+                            title="Cancel pending transfer request"
+                          >
+                            Cancel Transfer
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.transferBtn}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openTransferModal(task);
+                            }}
+                            title="Hand off this task to another team member"
+                          >
+                            🔄 Hand Off
+                          </button>
+                        )
+                      )}
+
+                      <button
+                        className={`${styles.btn} ${styles.chatBtn}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTask(task);
+                        }}
+                      >
+                        💬 Chat {task.comments?.length ? `(${task.comments.length})` : ""}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -1096,6 +1407,99 @@ const TeamMemberDashboard = () => {
                 ) : (
                   <>✓ Upload & Mark Completed</>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TASK TRANSFER / HAND-OFF MODAL */}
+      {taskToTransfer && (
+        <div className={styles.modalOverlay} onClick={closeTransferModal}>
+          <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <div className={styles.modalTitleGroup}>
+                <span className={styles.modalIcon}>🔄</span>
+                <div>
+                  <h3 className={styles.modalTitle}>Hand Off / Transfer Task</h3>
+                  <p className={styles.modalSubtitle}>
+                    Delegate #{taskToTransfer.id} &quot;{taskToTransfer.title}&quot; to a teammate
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className={styles.modalCloseBtn}
+                onClick={closeTransferModal}
+                disabled={transferLoading}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className={styles.transferModalContent}>
+              <div className={styles.transferNotice}>
+                ℹ️ When submitted, the selected teammate will receive an incoming transfer request on their dashboard. If they accept, the task will be reassigned to them.
+              </div>
+
+              {/* Select Peer Member */}
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel}>
+                  Select Teammate to Take Over *
+                </label>
+                {peerMembers.length === 0 ? (
+                  <p style={{ color: "#ef4444", fontSize: "13px" }}>
+                    ⚠️ No other team members are currently available to receive task hand-offs.
+                  </p>
+                ) : (
+                  <select
+                    className={styles.managerSelect}
+                    value={targetPeerId}
+                    onChange={(e) => setTargetPeerId(e.target.value)}
+                    disabled={transferLoading}
+                    style={{ width: "100%", padding: "10px 14px" }}
+                  >
+                    {peerMembers.map((peer) => (
+                      <option key={peer.id} value={peer.id}>
+                        👤 {peer.name} ({peer.email || `ID: ${peer.id}`})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Transfer Note / Reason */}
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel}>
+                  Reason / Notes for Hand-Off (Optional)
+                </label>
+                <textarea
+                  className={styles.fieldTextarea}
+                  placeholder="e.g. Under heavy workload with milestone deliverable, could you help take this over?"
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                  disabled={transferLoading}
+                />
+              </div>
+            </div>
+
+            <div className={styles.modalFooter}>
+              <button
+                type="button"
+                className={styles.modalCancelBtn}
+                onClick={closeTransferModal}
+                disabled={transferLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.modalSubmitBtn}
+                onClick={submitTransferRequest}
+                disabled={transferLoading || peerMembers.length === 0}
+                style={{ background: "#4f46e5" }}
+              >
+                {transferLoading ? "⏳ Sending Request..." : "📤 Send Transfer Request"}
               </button>
             </div>
           </div>

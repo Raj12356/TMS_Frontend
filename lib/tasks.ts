@@ -20,6 +20,9 @@ export interface TaskRecord {
   status: string;
   completed: boolean;
   attachments: string[];
+  transferRequestedTo?: number | null;
+  transferRequestedBy?: number | null;
+  transferNote?: string | null;
 }
 
 // ---------------------------------------------------------------- pure helpers (unit-tested)
@@ -44,6 +47,9 @@ export const emptyTask = (): TaskRecord => ({
   status: "pending",
   completed: false,
   attachments: [],
+  transferRequestedTo: null,
+  transferRequestedBy: null,
+  transferNote: null,
 });
 
 /**
@@ -64,6 +70,9 @@ export function mergeTask(cur: TaskRecord, patch: any, sync: boolean): TaskRecor
   if (has("attachments")) next.attachments = toAttachments(patch.attachments);
   if (has("completed")) next.completed = !!patch.completed;
   if (has("status")) next.status = String(patch.status);
+  if (has("transferRequestedTo")) next.transferRequestedTo = toIntOrNull(patch.transferRequestedTo);
+  if (has("transferRequestedBy")) next.transferRequestedBy = toIntOrNull(patch.transferRequestedBy);
+  if (has("transferNote")) next.transferNote = toStrOrNull(patch.transferNote);
 
   if (sync) {
     if (has("completed")) next.status = next.completed ? "completed" : "pending";
@@ -88,6 +97,9 @@ function toApiTask(r: any, comments: ApiComment[]) {
     status: r.status as string,
     completed: r.completed as boolean,
     attachments: (r.attachments ?? []) as string[],
+    transferRequestedTo: orUndef<number>(r.transfer_requested_to),
+    transferRequestedBy: orUndef<number>(r.transfer_requested_by),
+    transferNote: orUndef<string>(r.transfer_note),
     comments,
   };
 }
@@ -113,6 +125,9 @@ const rowToRecord = (r: any): TaskRecord => ({
   status: r.status,
   completed: r.completed,
   attachments: r.attachments ?? [],
+  transferRequestedTo: r.transfer_requested_to ?? null,
+  transferRequestedBy: r.transfer_requested_by ?? null,
+  transferNote: r.transfer_note ?? null,
 });
 
 // ---------------------------------------------------------------- tasks
@@ -135,7 +150,11 @@ async function attachComments(rows: any[]): Promise<ApiTask[]> {
   return rows.map((r) => toApiTask(r, byTask.get(r.id) ?? []));
 }
 
-export async function listTasks(filter: { userId?: number; assignedTo?: number }): Promise<ApiTask[]> {
+export async function listTasks(filter: {
+  userId?: number;
+  assignedTo?: number;
+  includeTransfers?: boolean;
+}): Promise<ApiTask[]> {
   const where: string[] = [];
   const params: any[] = [];
   if (filter.userId !== undefined) {
@@ -144,7 +163,11 @@ export async function listTasks(filter: { userId?: number; assignedTo?: number }
   }
   if (filter.assignedTo !== undefined) {
     params.push(filter.assignedTo);
-    where.push(`assigned_to = $${params.length}`);
+    if (filter.includeTransfers) {
+      where.push(`(assigned_to = $${params.length} OR transfer_requested_to = $${params.length})`);
+    } else {
+      where.push(`assigned_to = $${params.length}`);
+    }
   }
   const { rows } = await query(
     `SELECT * FROM tms_tasks ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY id`,
@@ -178,9 +201,25 @@ export async function updateTask(id: number, body: any, sync: boolean): Promise<
   const t = mergeTask(rowToRecord(cur.rows[0]), body, sync);
   await query(
     `UPDATE tms_tasks SET user_id=$2, assigned_to=$3, title=$4, description=$5, due_date=$6,
-            priority=$7, category=$8, status=$9, completed=$10, attachments=$11
+            priority=$7, category=$8, status=$9, completed=$10, attachments=$11,
+            transfer_requested_to=$12, transfer_requested_by=$13, transfer_note=$14
       WHERE id = $1`,
-    [id, t.userId, t.assignedTo, t.title, t.description, t.dueDate, t.priority, t.category, t.status, t.completed, t.attachments]
+    [
+      id,
+      t.userId,
+      t.assignedTo,
+      t.title,
+      t.description,
+      t.dueDate,
+      t.priority,
+      t.category,
+      t.status,
+      t.completed,
+      t.attachments,
+      t.transferRequestedTo ?? null,
+      t.transferRequestedBy ?? null,
+      t.transferNote ?? null,
+    ]
   );
   return getTask(id);
 }

@@ -5,11 +5,11 @@ import { listTasks, createTask, updateTask, deleteTask } from "../../../lib/task
 const fkError = () =>
   NextResponse.json({ error: "Referenced user does not exist" }, { status: 400 });
 
-// GET /api/tasks?userId=&assignedTo=
+// GET /api/tasks?userId=&assignedTo=&includeTransfers=
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const filter: { userId?: number; assignedTo?: number } = {};
+    const filter: { userId?: number; assignedTo?: number; includeTransfers?: boolean } = {};
 
     for (const key of ["userId", "assignedTo"] as const) {
       const raw = searchParams.get(key);
@@ -18,6 +18,10 @@ export async function GET(req: NextRequest) {
         if (!Number.isInteger(n)) return NextResponse.json([]);
         filter[key] = n;
       }
+    }
+
+    if (searchParams.get("includeTransfers") === "true") {
+      filter.includeTransfers = true;
     }
 
     return NextResponse.json(await listTasks(filter));
