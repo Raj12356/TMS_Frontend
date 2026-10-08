@@ -148,8 +148,11 @@ export default function ManagerDashboard() {
       .then((res) => (res.ok ? res.json() : []))
       .then((data: Comment[]) => {
         if (Array.isArray(data)) {
-          // Client-side safety filter: strictly only show this manager's messages
-          const filtered = data.filter((c) => c.managerId === managerId);
+          // If server returns items with managerId populated, keep only matching ones;
+          // otherwise if managerId is not on the response objects, display all returned comments for this task channel.
+          const filtered = data.filter(
+            (c) => c.managerId === undefined || c.managerId === null || c.managerId === managerId
+          );
           setPrivateComments(filtered);
         }
       })
@@ -251,8 +254,12 @@ export default function ManagerDashboard() {
         if (cRes.ok) {
           const cData = await cRes.json();
           if (Array.isArray(cData)) {
-            // Strictly only show this manager's messages
-            setPrivateComments(cData.filter((c: Comment) => c.managerId === managerId));
+            setPrivateComments(
+              cData.filter(
+                (c: Comment) =>
+                  c.managerId === undefined || c.managerId === null || c.managerId === managerId
+              )
+            );
           }
         }
       }
