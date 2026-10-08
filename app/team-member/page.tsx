@@ -228,6 +228,18 @@ const TeamMemberDashboard = () => {
         console.error("Error fetching tasks:", err);
         setTasks([]);
       });
+
+    // Auto-poll tasks every 5 seconds so transfers and task updates appear live in real-time
+    const interval = setInterval(() => {
+      fetch(`/api/tasks?assignedTo=${currentUserId}&includeTransfers=true`)
+        .then((res) => (res.ok ? res.json() : []))
+        .then((data) => {
+          if (Array.isArray(data)) setTasks(data);
+        })
+        .catch(() => {});
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [currentUserId]);
 
   const logout = () => {
@@ -502,16 +514,27 @@ const TeamMemberDashboard = () => {
 
     try {
       const targetUser = peerMembers.find((p) => p.id === Number(targetPeerId));
-      const res = await fetch("/api/tasks", {
+      const payload = {
+        id: taskToTransfer.id,
+        transferRequestedTo: Number(targetPeerId),
+        transferRequestedBy: currentUserId,
+        transferNote: transferReason.trim() || "No notes provided",
+      };
+
+      // Try specific task endpoint first, then fallback to /api/tasks
+      let res = await fetch(`/api/tasks/${taskToTransfer.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: taskToTransfer.id,
-          transferRequestedTo: Number(targetPeerId),
-          transferRequestedBy: currentUserId,
-          transferNote: transferReason.trim() || "No notes provided",
-        }),
+        body: JSON.stringify(payload),
       });
+
+      if (!res.ok) {
+        res = await fetch("/api/tasks", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
 
       if (!res.ok) {
         throw new Error("Failed to submit task transfer request");
@@ -534,17 +557,27 @@ const TeamMemberDashboard = () => {
     if (currentUserId === null) return;
 
     try {
-      const res = await fetch("/api/tasks", {
+      const payload = {
+        id: task.id,
+        assignedTo: currentUserId,
+        transferRequestedTo: null,
+        transferRequestedBy: null,
+        transferNote: null,
+      };
+
+      let res = await fetch(`/api/tasks/${task.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: task.id,
-          assignedTo: currentUserId,
-          transferRequestedTo: null,
-          transferRequestedBy: null,
-          transferNote: null,
-        }),
+        body: JSON.stringify(payload),
       });
+
+      if (!res.ok) {
+        res = await fetch("/api/tasks", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
 
       if (!res.ok) throw new Error("Failed to accept task transfer");
 
@@ -573,16 +606,26 @@ const TeamMemberDashboard = () => {
   // DECLINE TRANSFER
   const declineTransfer = async (task: Task) => {
     try {
-      const res = await fetch("/api/tasks", {
+      const payload = {
+        id: task.id,
+        transferRequestedTo: null,
+        transferRequestedBy: null,
+        transferNote: null,
+      };
+
+      let res = await fetch(`/api/tasks/${task.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: task.id,
-          transferRequestedTo: null,
-          transferRequestedBy: null,
-          transferNote: null,
-        }),
+        body: JSON.stringify(payload),
       });
+
+      if (!res.ok) {
+        res = await fetch("/api/tasks", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
 
       if (!res.ok) throw new Error("Failed to decline transfer");
 
@@ -598,16 +641,26 @@ const TeamMemberDashboard = () => {
   // CANCEL TRANSFER REQUEST (by original sender)
   const cancelTransfer = async (task: Task) => {
     try {
-      const res = await fetch("/api/tasks", {
+      const payload = {
+        id: task.id,
+        transferRequestedTo: null,
+        transferRequestedBy: null,
+        transferNote: null,
+      };
+
+      let res = await fetch(`/api/tasks/${task.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: task.id,
-          transferRequestedTo: null,
-          transferRequestedBy: null,
-          transferNote: null,
-        }),
+        body: JSON.stringify(payload),
       });
+
+      if (!res.ok) {
+        res = await fetch("/api/tasks", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
 
       if (!res.ok) throw new Error("Failed to cancel transfer");
 
