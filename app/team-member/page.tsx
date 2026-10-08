@@ -674,13 +674,21 @@ const TeamMemberDashboard = () => {
 
   // Transfer requests
   const incomingTransfers = safeTasks.filter(
-    (t) => t.transferRequestedTo === currentUserId && t.assignedTo !== currentUserId
+    (t) =>
+      currentUserId !== null &&
+      Number(t.transferRequestedTo) === Number(currentUserId) &&
+      Number(t.assignedTo) !== Number(currentUserId)
   );
   const outgoingTransfers = safeTasks.filter(
-    (t) => t.transferRequestedBy === currentUserId && t.transferRequestedTo
+    (t) =>
+      currentUserId !== null &&
+      Number(t.transferRequestedBy) === Number(currentUserId) &&
+      Boolean(t.transferRequestedTo)
   );
 
-  const myOwnTasks = safeTasks.filter((t) => t.assignedTo === currentUserId);
+  const myOwnTasks = safeTasks.filter(
+    (t) => currentUserId !== null && Number(t.assignedTo) === Number(currentUserId)
+  );
 
   const summary = {
     total: myOwnTasks.length,
@@ -699,12 +707,16 @@ const TeamMemberDashboard = () => {
   const filteredTasks = safeTasks.filter((t) => {
     if (filterTab === "transfers") {
       return (
-        (t.transferRequestedTo === currentUserId && t.assignedTo !== currentUserId) ||
-        (t.transferRequestedBy === currentUserId && t.transferRequestedTo)
+        (currentUserId !== null &&
+          Number(t.transferRequestedTo) === Number(currentUserId) &&
+          Number(t.assignedTo) !== Number(currentUserId)) ||
+        (currentUserId !== null &&
+          Number(t.transferRequestedBy) === Number(currentUserId) &&
+          Boolean(t.transferRequestedTo))
       );
     }
     // For other tabs, only show tasks actually assigned to me
-    if (t.assignedTo !== currentUserId) return false;
+    if (currentUserId === null || Number(t.assignedTo) !== Number(currentUserId)) return false;
     if (filterTab === "all") return true;
     return t.status === filterTab;
   });
@@ -969,7 +981,9 @@ const TeamMemberDashboard = () => {
                 )}
 
                 {/* TRANSFER STATUS INFO */}
-                {task.transferRequestedTo === currentUserId && task.assignedTo !== currentUserId && (
+                {currentUserId !== null &&
+                  Number(task.transferRequestedTo) === Number(currentUserId) &&
+                  Number(task.assignedTo) !== Number(currentUserId) && (
                   <div style={{
                     margin: "10px 0",
                     padding: "10px 12px",
@@ -984,7 +998,9 @@ const TeamMemberDashboard = () => {
                   </div>
                 )}
 
-                {task.transferRequestedBy === currentUserId && task.transferRequestedTo && (
+                {currentUserId !== null &&
+                  Number(task.transferRequestedBy) === Number(currentUserId) &&
+                  Boolean(task.transferRequestedTo) && (
                   <div className={styles.transferBadgePending}>
                     ⏳ Transfer request pending approval by teammate
                   </div>
@@ -992,7 +1008,9 @@ const TeamMemberDashboard = () => {
 
                 <div className={styles.buttons}>
                   {/* If incoming transfer requested to current user */}
-                  {task.transferRequestedTo === currentUserId && task.assignedTo !== currentUserId ? (
+                  {currentUserId !== null &&
+                  Number(task.transferRequestedTo) === Number(currentUserId) &&
+                  Number(task.assignedTo) !== Number(currentUserId) ? (
                     <>
                       <button
                         type="button"
@@ -1038,7 +1056,9 @@ const TeamMemberDashboard = () => {
                       </button>
 
                       {/* Request Transfer button (only for uncompleted tasks assigned to self) */}
-                      {task.status !== "completed" && task.assignedTo === currentUserId && (
+                      {task.status !== "completed" &&
+                        currentUserId !== null &&
+                        Number(task.assignedTo) === Number(currentUserId) && (
                         task.transferRequestedTo ? (
                           <button
                             type="button"
