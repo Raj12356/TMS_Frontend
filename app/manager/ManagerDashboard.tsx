@@ -269,6 +269,186 @@ export default function ManagerDashboard() {
     }
   };
 
+  // EXPORT TO CSV
+  const exportToCSV = () => {
+    if (!safeTasks || safeTasks.length === 0) {
+      alert("No tasks available to export.");
+      return;
+    }
+
+    const headers = ["ID", "Title", "Assignee", "Priority", "Status", "Due Date", "Completed", "Attachments Count"];
+    const rows = safeTasks.map((t) => {
+      const assigneeUser = users.find((u) => u.id === t.assignedTo);
+      const assigneeName = assigneeUser ? assigneeUser.name : (t.assignedTo ? `User #${t.assignedTo}` : "Unassigned");
+      const cleanTitle = (t.title || "").replace(/"/g, '""');
+      const priority = t.priority || "Medium";
+      const status = t.status || (t.completed ? "completed" : "pending");
+      const dueDate = t.dueDate || "No deadline";
+      const isCompleted = t.completed ? "Yes" : "No";
+      const attachmentsCount = t.attachments ? t.attachments.length : 0;
+
+      return `"${t.id}","${cleanTitle}","${assigneeName}","${priority}","${status}","${dueDate}","${isCompleted}","${attachmentsCount}"`;
+    });
+
+    const csvContent = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `TMS_Task_Report_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // EXPORT TO PRINTABLE PDF REPORT
+  const exportToPDF = () => {
+    if (!safeTasks || safeTasks.length === 0) {
+      alert("No tasks available to export.");
+      return;
+    }
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Please allow pop-ups to generate printable report.");
+      return;
+    }
+
+    const dateStr = new Date().toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const rowsHtml = safeTasks
+      .map((t, idx) => {
+        const assigneeUser = users.find((u) => u.id === t.assignedTo);
+        const assigneeName = assigneeUser ? assigneeUser.name : (t.assignedTo ? `User #${t.assignedTo}` : "Unassigned");
+        const status = t.status || (t.completed ? "completed" : "pending");
+        const priority = t.priority || "Medium";
+        const isDone = t.completed || status === "completed";
+
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? "#ffffff" : "#f8fafc"};">
+            <td style="padding: 10px; font-weight: 600; color: #475569;">#${t.id}</td>
+            <td style="padding: 10px; font-weight: 600; color: #0f172a;">${t.title}</td>
+            <td style="padding: 10px; color: #334155;">${assigneeName}</td>
+            <td style="padding: 10px;">
+              <span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: ${
+                priority.toLowerCase() === "high" ? "#fee2e2; color: #991b1b" : priority.toLowerCase() === "low" ? "#ecfdf5; color: #065f46" : "#fef3c7; color: #92400e"
+              };">
+                ${priority}
+              </span>
+            </td>
+            <td style="padding: 10px;">
+              <span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; background: ${
+                isDone ? "#dcfce7; color: #166534" : status === "in-progress" ? "#dbeafe; color: #1e40af" : "#f1f5f9; color: #475569"
+              };">
+                ${isDone ? "Completed" : status}
+              </span>
+            </td>
+            <td style="padding: 10px; color: #475569; font-size: 12px;">${t.dueDate || "No deadline"}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const reportHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>TMS Executive Task Report - ${dateStr}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding: 30px; color: #0f172a; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #4f46e5; padding-bottom: 16px; margin-bottom: 24px; }
+            .title h1 { margin: 0; font-size: 24px; color: #1e1b4b; }
+            .title p { margin: 4px 0 0; color: #64748b; font-size: 14px; }
+            .stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+            .stat-box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; text-align: center; }
+            .stat-box h4 { margin: 0; font-size: 12px; color: #64748b; text-transform: uppercase; }
+            .stat-box p { margin: 6px 0 0; font-size: 22px; font-weight: 800; color: #0f172a; }
+            table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+            th { background: #f1f5f9; padding: 12px 10px; font-size: 12px; font-weight: 700; color: #334155; text-transform: uppercase; border-bottom: 2px solid #cbd5e1; }
+            .footer { margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 14px; font-size: 12px; color: #94a3b8; display: flex; justify-content: space-between; }
+            @media print {
+              button.print-btn { display: none; }
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div style="text-align: right; margin-bottom: 14px;">
+            <button class="print-btn" onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer;">
+              🖨️ Print / Save as PDF
+            </button>
+          </div>
+
+          <div class="header">
+            <div class="title">
+              <h1>Task Management System</h1>
+              <p>Executive Team Delivery & Milestone Report</p>
+            </div>
+            <div style="text-align: right; font-size: 13px; color: #64748b;">
+              <strong>Generated:</strong> ${dateStr}<br/>
+              <strong>Prepared by:</strong> ${currentManager?.name || "Manager"}
+            </div>
+          </div>
+
+          <div class="stats-bar">
+            <div class="stat-box">
+              <h4>Total Tasks</h4>
+              <p>${total}</p>
+            </div>
+            <div class="stat-box">
+              <h4>Completed</h4>
+              <p style="color: #10b981;">${completed}</p>
+            </div>
+            <div class="stat-box">
+              <h4>In Progress</h4>
+              <p style="color: #2563eb;">${inProgress}</p>
+            </div>
+            <div class="stat-box">
+              <h4>Completion Rate</h4>
+              <p style="color: #4f46e5;">${completionRate}%</p>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 80px;">Task #</th>
+                <th>Task Title</th>
+                <th>Assigned To</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Due Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+
+          <div class="footer">
+            <span>Task Management System • Confidential & Internal Use Only</span>
+            <span>Author: Raja vishagan</span>
+          </div>
+
+          <script>
+            window.onload = function() {
+              setTimeout(function() { window.print(); }, 400);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(reportHtml);
+    printWindow.document.close();
+  };
+
   // LOGOUT
   const logout = () => {
     fetch("/api/logout", { method: "POST" }).catch(() => {});
@@ -440,12 +620,32 @@ export default function ManagerDashboard() {
                   <h3>All Team Tasks</h3>
                   <p>Comprehensive overview of tasks assigned across all team members</p>
                 </div>
-                <button
-                  className={styles.submitBtn}
-                  onClick={() => setActiveTab("assign")}
-                >
-                  + Assign New Task
-                </button>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className={styles.exportCsvBtn}
+                    onClick={exportToCSV}
+                    title="Export all tasks to CSV spreadsheet"
+                    style={{ padding: "8px 14px", fontSize: "13px" }}
+                  >
+                    📥 Export CSV
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.exportPdfBtn}
+                    onClick={exportToPDF}
+                    title="Generate printable executive PDF report"
+                    style={{ padding: "8px 14px", fontSize: "13px" }}
+                  >
+                    📄 Export PDF
+                  </button>
+                  <button
+                    className={styles.submitBtn}
+                    onClick={() => setActiveTab("assign")}
+                  >
+                    + Assign New Task
+                  </button>
+                </div>
               </div>
 
               {/* SEARCH & FILTER CONTROLS */}
@@ -882,6 +1082,32 @@ export default function ManagerDashboard() {
         {/* TAB 3: REPORTS & ANALYTICS */}
         {activeTab === "reports" && (
           <div className={styles.reportsLayout}>
+            {/* EXPORT REPORT BANNER */}
+            <div className={styles.exportBanner}>
+              <div className={styles.exportBannerInfo}>
+                <h3>📊 Executive Reports & Data Export</h3>
+                <p>Download task records in CSV spreadsheet or generate a formal printable PDF deliverable report</p>
+              </div>
+              <div className={styles.exportActions}>
+                <button
+                  type="button"
+                  className={styles.exportCsvBtn}
+                  onClick={exportToCSV}
+                  title="Download CSV Spreadsheet"
+                >
+                  📥 Export CSV
+                </button>
+                <button
+                  type="button"
+                  className={styles.exportPdfBtn}
+                  onClick={exportToPDF}
+                  title="Generate & Print PDF Report"
+                >
+                  📄 Export PDF Report
+                </button>
+              </div>
+            </div>
+
             {/* COMPLETION RATE CARD */}
             <div className={styles.reportCard}>
               <div className={styles.sectionHeader}>
